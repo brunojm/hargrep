@@ -36,7 +36,10 @@ impl FromStr for StatusRange {
                 return Err(format!("invalid status range '{s}': digit must be 1-5"));
             }
             let start = digit * 100;
-            return Ok(StatusRange { start, end: start + 99 });
+            return Ok(StatusRange {
+                start,
+                end: start + 99,
+            });
         }
 
         // Numeric range: e.g. "200-299"

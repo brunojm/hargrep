@@ -181,10 +181,12 @@ fn test_combined_filters() {
     ]);
     let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
     assert_eq!(parsed.len(), 1);
-    assert!(parsed[0]["request"]["url"]
-        .as_str()
-        .unwrap()
-        .contains("/users"));
+    assert!(
+        parsed[0]["request"]["url"]
+            .as_str()
+            .unwrap()
+            .contains("/users")
+    );
 }
 
 // --- I/O error paths ---
@@ -291,12 +293,7 @@ fn test_invalid_header_filter_empty_name() {
 
 #[test]
 fn test_count_conflicts_with_fields() {
-    let (_, stderr, code) = hargrep(&[
-        "--count",
-        "--fields",
-        "url",
-        "tests/fixtures/valid.har",
-    ]);
+    let (_, stderr, code) = hargrep(&["--count", "--fields", "url", "tests/fixtures/valid.har"]);
     assert_eq!(code, 2);
     assert!(
         stderr.to_lowercase().contains("count") || stderr.to_lowercase().contains("cannot"),
@@ -312,11 +309,6 @@ fn test_count_conflicts_with_no_body() {
 
 #[test]
 fn test_count_conflicts_with_output() {
-    let (_, _, code) = hargrep(&[
-        "--count",
-        "--output",
-        "jsonl",
-        "tests/fixtures/valid.har",
-    ]);
+    let (_, _, code) = hargrep(&["--count", "--output", "jsonl", "tests/fixtures/valid.har"]);
     assert_eq!(code, 2);
 }

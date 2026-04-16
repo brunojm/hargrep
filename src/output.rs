@@ -49,14 +49,9 @@ impl Field {
             Field::Status => Value::Number(entry.response.status.into()),
             Field::StatusText => Value::String(entry.response.status_text.clone()),
             Field::Time => serde_json::to_value(entry.time)?,
-            Field::MimeType => Value::String(
-                entry
-                    .response
-                    .content
-                    .mime_type
-                    .clone()
-                    .unwrap_or_default(),
-            ),
+            Field::MimeType => {
+                Value::String(entry.response.content.mime_type.clone().unwrap_or_default())
+            }
             Field::StartedDateTime => Value::String(entry.started_date_time.clone()),
         })
     }
@@ -174,7 +169,8 @@ mod tests {
     #[test]
     fn test_json_output() {
         let entries = load_entries();
-        let output = format_output(&entries, &formatted(OutputFormat::Json, vec![], false)).unwrap();
+        let output =
+            format_output(&entries, &formatted(OutputFormat::Json, vec![], false)).unwrap();
         let parsed: Vec<Value> = serde_json::from_str(&output).unwrap();
         assert_eq!(parsed.len(), 4);
     }
@@ -214,7 +210,8 @@ mod tests {
     fn test_fields_selection_basic() {
         let entries = load_entries();
         let fields = vec![Field::Url, Field::Status, Field::Time];
-        let output = format_output(&entries, &formatted(OutputFormat::Json, fields, false)).unwrap();
+        let output =
+            format_output(&entries, &formatted(OutputFormat::Json, fields, false)).unwrap();
         let parsed: Vec<Value> = serde_json::from_str(&output).unwrap();
         let first = &parsed[0];
         assert!(first.get("url").is_some());
@@ -227,7 +224,8 @@ mod tests {
     fn test_fields_preserves_camelcase_json_keys() {
         let entries = load_entries();
         let fields = vec![Field::StatusText, Field::MimeType, Field::StartedDateTime];
-        let output = format_output(&entries, &formatted(OutputFormat::Json, fields, false)).unwrap();
+        let output =
+            format_output(&entries, &formatted(OutputFormat::Json, fields, false)).unwrap();
         let parsed: Vec<Value> = serde_json::from_str(&output).unwrap();
         let first = &parsed[0];
         assert_eq!(first["statusText"], "OK");
@@ -268,7 +266,8 @@ mod tests {
     #[test]
     fn test_empty_entries_json() {
         let entries: Vec<Entry> = vec![];
-        let output = format_output(&entries, &formatted(OutputFormat::Json, vec![], false)).unwrap();
+        let output =
+            format_output(&entries, &formatted(OutputFormat::Json, vec![], false)).unwrap();
         assert_eq!(output.trim(), "[]");
     }
 
