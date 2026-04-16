@@ -10,13 +10,25 @@ HAR files are noisy. A single page load can produce hundreds of requests and doz
 
 ## Installation
 
-From source (requires [Rust](https://www.rust-lang.org/tools/install)):
+From [crates.io](https://crates.io/crates/hargrep) (requires [Rust](https://www.rust-lang.org/tools/install)):
 
 ```bash
+cargo install hargrep
+```
+
+This builds and installs the `hargrep` binary into `~/.cargo/bin` (make sure that's on your `PATH`).
+
+### From source
+
+Clone the repo and install from the checkout:
+
+```bash
+git clone https://github.com/brunojm/hargrep.git
+cd hargrep
 cargo install --path .
 ```
 
-Or build a release binary:
+Or build a release binary without installing:
 
 ```bash
 cargo build --release
