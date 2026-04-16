@@ -1,5 +1,7 @@
 # hargrep
 
+[![CI](https://github.com/brunojm/hargrep/actions/workflows/ci.yml/badge.svg)](https://github.com/brunojm/hargrep/actions/workflows/ci.yml)
+
 A Unix-style CLI tool for querying HAR (HTTP Archive) files. Like `grep` or `jq`, but purpose-built for HAR. Validates input, filters entries by flags, and outputs structured, machine-readable results optimized for LLM code agents.
 
 ## Why
