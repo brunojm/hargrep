@@ -39,7 +39,7 @@ Reads from stdin if no file is given.
 | `--url <PATTERN>` | `--url '/api/auth'` |
 | `--url-regex <REGEX>` | `--url-regex '/users/\d+'` |
 | `--header <NAME:VALUE>` | `--header 'Authorization:Bearer'` |
-| `--mime <TYPE>` | `--mime application/json` |
+| `--mime <SUBSTRING>` | `--mime application/json` (matches `application/json; charset=utf-8` too) |
 | `--min-time <MS>` | `--min-time 500` |
 
 Filters combine with AND logic.

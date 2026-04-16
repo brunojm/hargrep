@@ -145,7 +145,10 @@ fn matches_all(entry: &Entry, opts: &FilterOptions) -> bool {
     }
     if let Some(ref mime) = opts.mime {
         let entry_mime = entry.response.content.mime_type.as_deref().unwrap_or("");
-        if !entry_mime.eq_ignore_ascii_case(mime) {
+        if !entry_mime
+            .to_ascii_lowercase()
+            .contains(&mime.to_ascii_lowercase())
+        {
             return false;
         }
     }
@@ -395,6 +398,68 @@ mod tests {
         };
         let result = filter_entries(entries, &opts);
         assert_eq!(result.len(), 1);
+    }
+
+    #[test]
+    fn test_filter_by_mime_is_substring() {
+        // Simulates real-world HARs where the same logical type appears with
+        // and without charset suffixes. `--mime application/json` should
+        // match both `application/json` and `application/json; charset=utf-8`.
+        use crate::har::{Content, Request, Response, Timings};
+
+        fn entry_with_mime(mime: &str) -> Entry {
+            Entry {
+                started_date_time: "2026-01-15T10:00:00.000Z".to_string(),
+                time: 1.0,
+                request: Request {
+                    method: "GET".to_string(),
+                    url: "https://example.com/".to_string(),
+                    http_version: "HTTP/1.1".to_string(),
+                    headers: vec![],
+                    query_string: vec![],
+                    headers_size: -1,
+                    body_size: -1,
+                    post_data: None,
+                },
+                response: Response {
+                    status: 200,
+                    status_text: "OK".to_string(),
+                    http_version: "HTTP/1.1".to_string(),
+                    headers: vec![],
+                    content: Content {
+                        size: 0,
+                        mime_type: Some(mime.to_string()),
+                        text: None,
+                    },
+                    redirect_url: String::new(),
+                    headers_size: -1,
+                    body_size: 0,
+                },
+                timings: Timings {
+                    send: 0.0,
+                    wait: 0.0,
+                    receive: 0.0,
+                },
+                cache: None,
+            }
+        }
+
+        let entries = vec![
+            entry_with_mime("application/json"),
+            entry_with_mime("application/json; charset=utf-8"),
+            entry_with_mime("application/json; charset=UTF-8"),
+            entry_with_mime("text/html"),
+        ];
+        let opts = FilterOptions {
+            mime: Some("application/json".to_string()),
+            ..Default::default()
+        };
+        let result = filter_entries(entries, &opts);
+        assert_eq!(
+            result.len(),
+            3,
+            "substring match should hit all three json variants"
+        );
     }
 
     #[test]

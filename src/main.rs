@@ -41,7 +41,7 @@ struct Cli {
     #[arg(long)]
     header: Option<HeaderFilter>,
 
-    /// Filter by response MIME type (exact, case-insensitive)
+    /// Filter by response MIME type (substring, case-insensitive)
     #[arg(long)]
     mime: Option<String>,
 
