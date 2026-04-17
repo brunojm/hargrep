@@ -237,6 +237,207 @@ fn test_stdin_input() {
     assert_eq!(stdout.trim(), "4");
 }
 
+// --- --domains aggregate ---
+
+#[test]
+fn test_domains_emits_json_array_sorted_desc() {
+    let (stdout, _, code) = hargrep(&["--domains", "tests/fixtures/valid.har"]);
+    assert_eq!(code, 0);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(parsed.len(), 2);
+    // api.example.com: 3, cdn.example.com: 1. Sorted desc.
+    assert_eq!(parsed[0]["domain"], "api.example.com");
+    assert_eq!(parsed[0]["count"], 3);
+    assert_eq!(parsed[1]["domain"], "cdn.example.com");
+    assert_eq!(parsed[1]["count"], 1);
+}
+
+#[test]
+fn test_domains_respects_filter() {
+    let (stdout, _, _) = hargrep(&["--domains", "--method", "GET", "tests/fixtures/valid.har"]);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    // Only GETs: 2 to api.example.com (users, users/999), 1 to cdn (image.png).
+    let api = parsed
+        .iter()
+        .find(|d| d["domain"] == "api.example.com")
+        .unwrap();
+    assert_eq!(api["count"], 2);
+}
+
+#[test]
+fn test_domains_conflicts_with_overview() {
+    let (_, _, code) = hargrep(&["--domains", "--overview", "tests/fixtures/valid.har"]);
+    assert_eq!(code, 2);
+}
+
+// --- --size-by-type aggregate ---
+
+#[test]
+fn test_size_by_type_emits_json_array_sorted_by_bytes_desc() {
+    let (stdout, _, code) = hargrep(&["--size-by-type", "tests/fixtures/valid.har"]);
+    assert_eq!(code, 0);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    assert!(!parsed.is_empty());
+    // Each entry: mime_type, total_bytes, count.
+    let first = &parsed[0];
+    assert!(first.get("mime_type").is_some());
+    assert!(first.get("total_bytes").is_some());
+    assert!(first.get("count").is_some());
+    // Sorted by total_bytes desc.
+    let bytes: Vec<i64> = parsed
+        .iter()
+        .map(|e| e["total_bytes"].as_i64().unwrap())
+        .collect();
+    let mut sorted = bytes.clone();
+    sorted.sort_by(|a, b| b.cmp(a));
+    assert_eq!(bytes, sorted);
+}
+
+#[test]
+fn test_size_by_type_respects_filter() {
+    let (stdout, _, _) = hargrep(&[
+        "--size-by-type",
+        "--method",
+        "POST",
+        "tests/fixtures/valid.har",
+    ]);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    // Only 1 POST with application/json.
+    assert_eq!(parsed.len(), 1);
+    assert!(parsed[0]["mime_type"].as_str().unwrap().contains("json"));
+    assert_eq!(parsed[0]["count"], 1);
+}
+
+// --- --redirects view ---
+
+#[test]
+fn test_redirects_lists_3xx_with_location() {
+    // valid.har doesn't have 3xx entries; use stdin to synthesize.
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let synth = r#"{"log":{"version":"1.2","creator":{"name":"t","version":"1"},
+        "entries":[
+          {"startedDateTime":"2026-01-15T10:00:00.000Z","time":10,
+           "request":{"method":"GET","url":"https://a.example/","httpVersion":"HTTP/1.1","headers":[],"queryString":[],"headersSize":-1,"bodySize":-1},
+           "response":{"status":301,"statusText":"Moved","httpVersion":"HTTP/1.1",
+             "headers":[{"name":"Location","value":"https://a.example/home"}],
+             "content":{"size":0,"mimeType":"text/html"},"redirectURL":"https://a.example/home","headersSize":-1,"bodySize":0},
+           "cache":{},"timings":{"send":0,"wait":10,"receive":0}},
+          {"startedDateTime":"2026-01-15T10:00:01.000Z","time":12,
+           "request":{"method":"GET","url":"https://a.example/old","httpVersion":"HTTP/1.1","headers":[],"queryString":[],"headersSize":-1,"bodySize":-1},
+           "response":{"status":302,"statusText":"Found","httpVersion":"HTTP/1.1",
+             "headers":[{"name":"Location","value":"https://a.example/new"}],
+             "content":{"size":0,"mimeType":"text/html"},"redirectURL":"https://a.example/new","headersSize":-1,"bodySize":0},
+           "cache":{},"timings":{"send":0,"wait":12,"receive":0}}
+        ]}}"#;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_hargrep"))
+        .arg("--redirects")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(synth.as_bytes())
+        .unwrap();
+    let out = child.wait_with_output().unwrap();
+    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(parsed.len(), 2);
+    assert_eq!(parsed[0]["status"], 301);
+    assert_eq!(parsed[0]["location"], "https://a.example/home");
+    assert_eq!(parsed[0]["id"], 0);
+    assert_eq!(parsed[1]["status"], 302);
+    assert_eq!(parsed[1]["location"], "https://a.example/new");
+}
+
+#[test]
+fn test_redirects_with_no_3xx_returns_empty_array() {
+    let (stdout, _, _) = hargrep(&["--redirects", "tests/fixtures/valid.har"]);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    assert!(parsed.is_empty());
+}
+
+#[test]
+fn test_redirects_exits_1_when_empty() {
+    // valid.har has no 3xx entries — grep-like contract: empty result → exit 1.
+    let (_, _, code) = hargrep(&["--redirects", "tests/fixtures/valid.har"]);
+    assert_eq!(code, 1);
+}
+
+#[test]
+fn test_domains_exits_1_when_filter_produces_no_entries() {
+    let (_, _, code) = hargrep(&["--domains", "--status", "999", "tests/fixtures/valid.har"]);
+    assert_eq!(code, 1);
+}
+
+#[test]
+fn test_size_by_type_exits_1_when_filter_produces_no_entries() {
+    let (_, _, code) = hargrep(&[
+        "--size-by-type",
+        "--status",
+        "999",
+        "tests/fixtures/valid.har",
+    ]);
+    assert_eq!(code, 1);
+}
+
+#[test]
+fn test_domains_exits_0_on_matches() {
+    let (_, _, code) = hargrep(&["--domains", "tests/fixtures/valid.har"]);
+    assert_eq!(code, 0);
+}
+
+// --- --body-grep filter ---
+
+#[test]
+fn test_body_grep_matches_response_body_substring() {
+    // Entry 1 response body is {"id": 2, "name": "Alice"} — grep for "Alice".
+    let (stdout, _, _) = hargrep(&["--body-grep", "Alice", "tests/fixtures/valid.har"]);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(parsed.len(), 1);
+    assert_eq!(parsed[0]["id"], 1);
+}
+
+#[test]
+fn test_body_grep_matches_request_post_body_substring() {
+    // Entry 1 is a POST with postData text containing "Alice".
+    let (stdout, _, _) = hargrep(&[
+        "--body-grep",
+        "\"name\": \"Alice\"",
+        "tests/fixtures/valid.har",
+    ]);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    assert!(parsed.iter().any(|e| e["id"] == 1));
+}
+
+#[test]
+fn test_body_grep_no_match_exits_1() {
+    let (_, _, code) = hargrep(&[
+        "--body-grep",
+        "zzz_nothing_here_zzz",
+        "tests/fixtures/valid.har",
+    ]);
+    assert_eq!(code, 1);
+}
+
+#[test]
+fn test_body_grep_composes_with_other_filters() {
+    let (stdout, _, _) = hargrep(&[
+        "--body-grep",
+        "Alice",
+        "--method",
+        "POST",
+        "tests/fixtures/valid.har",
+    ]);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(parsed.len(), 1);
+    assert_eq!(parsed[0]["request"]["method"], "POST");
+}
+
 // --- --overview dashboard ---
 
 #[test]
