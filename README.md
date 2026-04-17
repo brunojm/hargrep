@@ -55,6 +55,7 @@ Reads from stdin if no file is given.
 | `--header <NAME:VALUE>` | `--header 'Authorization:Bearer'` |
 | `--mime <SUBSTRING>` | `--mime application/json` (matches `application/json; charset=utf-8` too) |
 | `--min-time <MS>` | `--min-time 500` |
+| `--body-grep <SUBSTRING>` | Match against request or response body text (case-sensitive). |
 
 Filters combine with AND logic.
 
@@ -66,6 +67,9 @@ Filters combine with AND logic.
 | `--fields <FIELDS>` | Comma-separated. Valid names: `id`, `url`, `method`, `status`, `status-text`, `time`, `mime-type`, `started-date-time`. CLI names are kebab-case; emitted JSON keys preserve HAR camelCase (`statusText`, `mimeType`). Unknown names error at parse time. |
 | `--count` | Print only the count of matching entries. Conflicts with `--fields`, `--no-body`, `--output`. |
 | `--overview` | Print a single JSON dashboard of the filtered HAR: entry count, status/method/MIME histograms, top 10 domains, total body size, total time. Replaces a cascade of exploratory queries with one call. |
+| `--domains` | Emit `[{domain, count}]` sorted by count desc. Respects filters. |
+| `--size-by-type` | Emit `[{mime_type, total_bytes, count}]` sorted by total_bytes desc. Respects filters. |
+| `--redirects` | Emit `[{id, url, status, location}]` for every 3xx entry. Respects filters. |
 | `--entry <N>` | Fetch a single entry by id (its original 0-indexed position in the HAR). Returns a JSON object, not an array. |
 | `--no-body` | Exclude all request/response body text. |
 | `--include-all-bodies` | Include bodies for static-asset MIME types (CSS/JS/images/fonts/WASM). By default those are stripped to save tokens. |
@@ -108,6 +112,14 @@ hargrep --overview recording.har
 # Narrow with filters, list IDs, then fetch one entry in full
 hargrep --status-range 5xx --fields id,url,status --output jsonl recording.har
 hargrep --entry 42 recording.har
+
+# Aggregate views — one call each
+hargrep --domains recording.har                           # which hosts?
+hargrep --size-by-type recording.har                      # where's the bandwidth going?
+hargrep --redirects recording.har                         # all 3xx + Location headers
+
+# Body search that actually knows about HAR schema
+hargrep --body-grep 'session expired' --fields id,url,status recording.har
 
 # Validate before processing
 hargrep --validate untrusted.har

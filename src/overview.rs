@@ -92,8 +92,8 @@ fn methods_to_map(bt: BTreeMap<String, u64>) -> Map<String, Value> {
 
 /// Extract the host portion of a URL without pulling in a full URL parser.
 /// Tolerates missing schemes and malformed input — returns None rather than
-/// erroring, so one weird URL doesn't break the whole overview.
-fn extract_host(url: &str) -> Option<String> {
+/// erroring, so one weird URL doesn't break aggregate views.
+pub fn extract_host(url: &str) -> Option<String> {
     let after_scheme = url.split_once("://").map(|(_, rest)| rest).unwrap_or(url);
     let host = after_scheme
         .split(['/', '?', '#'])
