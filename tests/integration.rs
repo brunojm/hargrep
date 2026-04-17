@@ -455,6 +455,47 @@ fn test_entry_flag_conflicts_with_count() {
     assert_eq!(code, 2);
 }
 
+#[test]
+fn test_entry_flag_conflicts_with_filter_flags() {
+    // --entry is a direct lookup; combining with filters would silently ignore
+    // the predicates and mislead automation.
+    let cases: &[&[&str]] = &[
+        &["--status", "500"],
+        &["--method", "GET"],
+        &["--url", "/users"],
+        &["--status-range", "5xx"],
+        &["--mime", "json"],
+        &["--min-time", "100"],
+        &["--header", "Authorization"],
+    ];
+    for filter_args in cases {
+        let mut args = vec!["--entry", "0"];
+        args.extend_from_slice(filter_args);
+        args.push("tests/fixtures/valid.har");
+        let (_, stderr, code) = hargrep(&args);
+        assert_eq!(
+            code, 2,
+            "--entry with {filter_args:?} should exit 2; stderr: {stderr}"
+        );
+    }
+}
+
+#[test]
+fn test_overview_exits_1_when_filter_produces_no_matches() {
+    // Grep-like exit contract: empty result → exit 1.
+    let (stdout, _, code) = hargrep(&["--overview", "--status", "999", "tests/fixtures/valid.har"]);
+    assert_eq!(code, 1);
+    // Body still emitted — empty overview is informative.
+    let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(parsed["entries"], 0);
+}
+
+#[test]
+fn test_overview_exits_0_when_there_are_matches() {
+    let (_, _, code) = hargrep(&["--overview", "tests/fixtures/valid.har"]);
+    assert_eq!(code, 0);
+}
+
 // --- CLI argument validation (parse-time errors) ---
 
 #[test]

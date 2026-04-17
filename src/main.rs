@@ -74,8 +74,17 @@ struct Cli {
 
     /// Fetch a single entry by id (the original 0-indexed position in the HAR).
     /// Returns a JSON object, not an array. Useful after listing entries with
-    /// `--fields id,url,status` and then zeroing in on one.
-    #[arg(long, conflicts_with_all = ["count", "fields", "output"])]
+    /// `--fields id,url,status` and then zeroing in on one. `--entry` is a
+    /// direct lookup, not a filter operation — it conflicts with filter flags
+    /// so an agent can't accidentally combine them and get surprising results.
+    #[arg(
+        long,
+        conflicts_with_all = [
+            "count", "fields", "output",
+            "method", "status", "status_range", "url", "url_regex",
+            "header", "mime", "min_time",
+        ]
+    )]
     entry: Option<usize>,
 
     /// Exclude request/response bodies from output
@@ -162,7 +171,8 @@ fn run(cli: Cli) -> Result<i32> {
             serde_json::to_string(&doc)?
         };
         println!("{serialized}");
-        return Ok(0);
+        // Keep grep-like exit semantics: empty filtered set → exit 1.
+        return Ok(exit_code);
     }
 
     let mode = if cli.count {
