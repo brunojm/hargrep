@@ -110,6 +110,9 @@ pub struct FilterOptions {
     /// Matches if either contains the pattern. Agents fall through to
     /// `grep`/`rg` on raw HAR otherwise, which is noisy and unreliable.
     pub body_grep: Option<String>,
+    /// Regex variant of `body_grep`. Compiled at CLI parse time (invalid
+    /// patterns error with exit code 2 before any file is read).
+    pub body_regex: Option<Regex>,
 }
 
 /// Filter entries against the provided options, preserving each entry's
@@ -174,7 +177,27 @@ fn matches_all(entry: &Entry, opts: &FilterOptions) -> bool {
     {
         return false;
     }
+    if let Some(ref re) = opts.body_regex
+        && !body_matches_regex(entry, re)
+    {
+        return false;
+    }
     true
+}
+
+fn body_matches_regex(entry: &Entry, re: &Regex) -> bool {
+    if let Some(resp_text) = entry.response.content.text.as_deref()
+        && re.is_match(resp_text)
+    {
+        return true;
+    }
+    if let Some(post_data) = &entry.request.post_data
+        && let Some(req_text) = post_data.text.as_deref()
+        && re.is_match(req_text)
+    {
+        return true;
+    }
+    false
 }
 
 fn body_contains(entry: &Entry, pat: &str) -> bool {

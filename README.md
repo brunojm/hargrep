@@ -56,6 +56,7 @@ Reads from stdin if no file is given.
 | `--mime <SUBSTRING>` | `--mime application/json` (matches `application/json; charset=utf-8` too) |
 | `--min-time <MS>` | `--min-time 500` |
 | `--body-grep <SUBSTRING>` | Match against request or response body text (case-sensitive). |
+| `--body-regex <REGEX>` | Regex match against request or response body text. Use `(?i)pattern` for case-insensitive. |
 
 Filters combine with AND logic.
 
@@ -84,6 +85,7 @@ Static-asset response bodies (images, fonts, CSS, JS, WASM, video, audio) are st
 |------|-------------|
 | `--validate` | Validate HAR only, no query |
 | `-v`, `--verbose` | Print parsing info to stderr |
+| `--help-llm` | Print a compact, LLM-tuned cheatsheet of every flag (~1.5 KB vs ~3.5 KB for `--help`) and exit. |
 
 ### Exit codes
 
