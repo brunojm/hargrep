@@ -2,11 +2,12 @@ mod filter;
 mod har;
 mod input;
 mod output;
+mod overview;
 
 use anyhow::Result;
 use clap::Parser;
 use filter::{FilterOptions, HeaderFilter, StatusRange};
-use output::{Field, OutputFormat, OutputMode};
+use output::{BodyMode, Field, OutputFormat, OutputMode};
 use regex::Regex;
 use std::path::PathBuf;
 use std::process;
@@ -62,9 +63,39 @@ struct Cli {
     #[arg(long)]
     count: bool,
 
+    /// Print a single-shot JSON dashboard of the filtered HAR: entry count,
+    /// status/method/MIME histograms, top domains, total body size, total time.
+    /// Replaces a cascade of exploratory queries with one call.
+    #[arg(
+        long,
+        conflicts_with_all = ["count", "fields", "entry", "no_body", "include_all_bodies", "output"]
+    )]
+    overview: bool,
+
+    /// Fetch a single entry by id (the original 0-indexed position in the HAR).
+    /// Returns a JSON object, not an array. Useful after listing entries with
+    /// `--fields id,url,status` and then zeroing in on one. `--entry` is a
+    /// direct lookup, not a filter operation — it conflicts with filter flags
+    /// so an agent can't accidentally combine them and get surprising results.
+    #[arg(
+        long,
+        conflicts_with_all = [
+            "count", "fields", "output",
+            "method", "status", "status_range", "url", "url_regex",
+            "header", "mime", "min_time",
+        ]
+    )]
+    entry: Option<usize>,
+
     /// Exclude request/response bodies from output
-    #[arg(long, conflicts_with = "count")]
+    #[arg(long, conflicts_with_all = ["count", "include_all_bodies"])]
     no_body: bool,
+
+    /// Include bodies for static-asset MIME types (CSS/JS/images/fonts/WASM)
+    /// that would otherwise be stripped by default. Use when you actually need
+    /// to inspect an asset payload.
+    #[arg(long, conflicts_with = "count")]
+    include_all_bodies: bool,
 
     /// Validate HAR only, don't query
     #[arg(long)]
@@ -100,6 +131,24 @@ fn run(cli: Cli) -> Result<i32> {
         return Ok(0);
     }
 
+    let body_mode = if cli.no_body {
+        BodyMode::StripAll
+    } else if cli.include_all_bodies {
+        BodyMode::IncludeAll
+    } else {
+        BodyMode::SkipAssets
+    };
+
+    if let Some(id) = cli.entry {
+        let total = har.log.entries.len();
+        let entry = har.log.entries.into_iter().nth(id).ok_or_else(|| {
+            anyhow::anyhow!("entry id {id} out of range (HAR has {total} entries)")
+        })?;
+        let output = output::format_single_entry(id, &entry, body_mode)?;
+        print!("{output}");
+        return Ok(0);
+    }
+
     let filter_opts = FilterOptions {
         method: cli.method,
         status: cli.status,
@@ -114,13 +163,25 @@ fn run(cli: Cli) -> Result<i32> {
     let filtered = filter::filter_entries(har.log.entries, &filter_opts);
     let exit_code = if filtered.is_empty() { 1 } else { 0 };
 
+    if cli.overview {
+        let doc = overview::build_overview(&filtered);
+        let serialized = if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+            serde_json::to_string_pretty(&doc)?
+        } else {
+            serde_json::to_string(&doc)?
+        };
+        println!("{serialized}");
+        // Keep grep-like exit semantics: empty filtered set → exit 1.
+        return Ok(exit_code);
+    }
+
     let mode = if cli.count {
         OutputMode::Count
     } else {
         OutputMode::Formatted {
             format: cli.output,
             fields: cli.fields,
-            no_body: cli.no_body,
+            body: body_mode,
         }
     };
 

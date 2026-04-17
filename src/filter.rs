@@ -108,10 +108,15 @@ pub struct FilterOptions {
     pub min_time: Option<f64>,
 }
 
-pub fn filter_entries(entries: Vec<Entry>, opts: &FilterOptions) -> Vec<Entry> {
+/// Filter entries against the provided options, preserving each entry's
+/// original index in the HAR. Downstream formatters emit this index as `id`,
+/// which lets an LLM agent list entries and then fetch one by id stably even
+/// after the filter set changes.
+pub fn filter_entries(entries: Vec<Entry>, opts: &FilterOptions) -> Vec<(usize, Entry)> {
     entries
         .into_iter()
-        .filter(|entry| matches_all(entry, opts))
+        .enumerate()
+        .filter(|(_, entry)| matches_all(entry, opts))
         .collect()
 }
 
@@ -273,7 +278,7 @@ mod tests {
         };
         let result = filter_entries(entries, &opts);
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].request.method, "POST");
+        assert_eq!(result[0].1.request.method, "POST");
     }
 
     #[test]
@@ -296,7 +301,7 @@ mod tests {
         };
         let result = filter_entries(entries, &opts);
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].response.status, 404);
+        assert_eq!(result[0].1.response.status, 404);
     }
 
     #[test]
@@ -308,7 +313,7 @@ mod tests {
         };
         let result = filter_entries(entries, &opts);
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].response.status, 404);
+        assert_eq!(result[0].1.response.status, 404);
     }
 
     #[test]
@@ -342,7 +347,7 @@ mod tests {
         };
         let result = filter_entries(entries, &opts);
         assert_eq!(result.len(), 1);
-        assert!(result[0].request.url.contains("/users/999"));
+        assert!(result[0].1.request.url.contains("/users/999"));
     }
 
     #[test]
@@ -354,7 +359,7 @@ mod tests {
         };
         let result = filter_entries(entries, &opts);
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].request.method, "POST");
+        assert_eq!(result[0].1.request.method, "POST");
     }
 
     #[test]
@@ -366,7 +371,7 @@ mod tests {
         };
         let result = filter_entries(entries, &opts);
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0].request.method, "POST");
+        assert_eq!(result[0].1.request.method, "POST");
     }
 
     #[test]
@@ -389,7 +394,7 @@ mod tests {
         };
         let result = filter_entries(entries, &opts);
         assert_eq!(result.len(), 1);
-        assert!(result[0].request.url.contains("image.png"));
+        assert!(result[0].1.request.url.contains("image.png"));
     }
 
     #[test]

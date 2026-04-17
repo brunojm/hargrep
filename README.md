@@ -62,10 +62,17 @@ Filters combine with AND logic.
 
 | Flag | Description |
 |------|-------------|
-| `--output <FORMAT>` | `json` (default), `jsonl`, or `summary` |
-| `--fields <FIELDS>` | Comma-separated. Valid names: `url`, `method`, `status`, `status-text`, `time`, `mime-type`, `started-date-time`. CLI names are kebab-case; emitted JSON keys preserve HAR camelCase (`statusText`, `mimeType`). Unknown names error at parse time. |
+| `--output <FORMAT>` | `json` (default, pretty in a TTY, compact when piped), `jsonl`, or `summary`. |
+| `--fields <FIELDS>` | Comma-separated. Valid names: `id`, `url`, `method`, `status`, `status-text`, `time`, `mime-type`, `started-date-time`. CLI names are kebab-case; emitted JSON keys preserve HAR camelCase (`statusText`, `mimeType`). Unknown names error at parse time. |
 | `--count` | Print only the count of matching entries. Conflicts with `--fields`, `--no-body`, `--output`. |
-| `--no-body` | Exclude request/response bodies |
+| `--overview` | Print a single JSON dashboard of the filtered HAR: entry count, status/method/MIME histograms, top 10 domains, total body size, total time. Replaces a cascade of exploratory queries with one call. |
+| `--entry <N>` | Fetch a single entry by id (its original 0-indexed position in the HAR). Returns a JSON object, not an array. |
+| `--no-body` | Exclude all request/response body text. |
+| `--include-all-bodies` | Include bodies for static-asset MIME types (CSS/JS/images/fonts/WASM). By default those are stripped to save tokens. |
+
+Every output entry includes an `id` field — the entry's original 0-indexed position in the HAR. IDs are stable across filter changes, so you can list matches with `--fields id,url,status` and then drill into a specific one with `--entry N`.
+
+Static-asset response bodies (images, fonts, CSS, JS, WASM, video, audio) are stripped by default, since they dominate HAR size but rarely help debug API behaviour. Use `--include-all-bodies` to keep them, or `--no-body` to strip everything.
 
 ### Utility
 
@@ -95,6 +102,13 @@ hargrep --method POST --count session.har
 # LLM-friendly: just URLs, statuses, timings, no bodies
 hargrep --fields url,status,time --no-body --output jsonl recording.har
 
+# One-shot overview of a HAR: entry count, histograms, top domains, totals
+hargrep --overview recording.har
+
+# Narrow with filters, list IDs, then fetch one entry in full
+hargrep --status-range 5xx --fields id,url,status --output jsonl recording.har
+hargrep --entry 42 recording.har
+
 # Validate before processing
 hargrep --validate untrusted.har
 
@@ -109,20 +123,22 @@ hargrep --header 'Authorization:Bearer' --fields url,status recording.har
 
 `hargrep` is designed to fit into agent pipelines:
 
-- **Predictable schema** — every output mode produces deterministic, well-formed JSON or compact text
-- **`--fields`** — request only the columns you need so the output stays small
-- **`--no-body`** — strip base64 images and large response bodies
-- **`--count`** — check scope cheaply before committing context to a full query
-- **`--jsonl`** — stream one entry per line, easy to chunk
+- **Predictable schema** — every output mode produces deterministic, well-formed JSON or compact text.
+- **Stable entry IDs** — every entry includes an `id` field (its original HAR index). List matches cheaply, then fetch specific entries with `--entry N`.
+- **`--overview`** — one call returns a dashboard of the (optionally filtered) HAR. Replaces several exploratory queries.
+- **`--fields`** — request only the columns you need so the output stays small.
+- **Asset bodies stripped by default** — CSS/JS/images/fonts/WASM response bodies are dropped automatically since they dominate HAR size. `--include-all-bodies` disables this; `--no-body` strips everything.
+- **`--count`** — check scope cheaply before committing context to a full query.
+- **`--output jsonl`** — stream one entry per line, easy to chunk. Default JSON is compact when piped and pretty in a TTY.
 - **Fails fast** — CLI arguments are validated before any file is read. Unknown `--fields` names, invalid `--status-range`, bad `--url-regex`, and conflicting flags (e.g. `--count --fields`) all error with exit code 2 and a descriptive message on stderr. Typos surface immediately instead of producing empty results.
 
-Typical agent flow: validate → count → filter narrowly → read specific entries.
+Typical agent flow: overview → filter → fetch specific entries.
 
 ```bash
-hargrep --validate recording.har                          # check it parses
-hargrep --count --status-range 5xx recording.har          # probe the scope
-hargrep --status-range 5xx --fields url,status,time \
-  --output jsonl recording.har                            # pull just what's needed
+hargrep --overview recording.har                          # shape + scope in one call
+hargrep --status-range 5xx --fields id,url,status \
+  --output jsonl recording.har                            # list candidates
+hargrep --entry 42 recording.har                          # pull the full entry for one id
 ```
 
 ## HAR format
