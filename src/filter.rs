@@ -106,6 +106,10 @@ pub struct FilterOptions {
     pub header: Option<HeaderFilter>,
     pub mime: Option<String>,
     pub min_time: Option<f64>,
+    /// Substring match against request postData.text OR response content.text.
+    /// Matches if either contains the pattern. Agents fall through to
+    /// `grep`/`rg` on raw HAR otherwise, which is noisy and unreliable.
+    pub body_grep: Option<String>,
 }
 
 /// Filter entries against the provided options, preserving each entry's
@@ -165,7 +169,27 @@ fn matches_all(entry: &Entry, opts: &FilterOptions) -> bool {
     {
         return false;
     }
+    if let Some(ref pat) = opts.body_grep
+        && !body_contains(entry, pat)
+    {
+        return false;
+    }
     true
+}
+
+fn body_contains(entry: &Entry, pat: &str) -> bool {
+    if let Some(resp_text) = entry.response.content.text.as_deref()
+        && resp_text.contains(pat)
+    {
+        return true;
+    }
+    if let Some(post_data) = &entry.request.post_data
+        && let Some(req_text) = post_data.text.as_deref()
+        && req_text.contains(pat)
+    {
+        return true;
+    }
+    false
 }
 
 fn has_header(entry: &Entry, hf: &HeaderFilter) -> bool {
