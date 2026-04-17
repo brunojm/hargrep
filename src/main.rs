@@ -56,6 +56,11 @@ struct Cli {
     #[arg(long)]
     body_grep: Option<String>,
 
+    /// Filter by regex match against request or response body text.
+    /// Use `(?i)pattern` for case-insensitive matching.
+    #[arg(long)]
+    body_regex: Option<Regex>,
+
     /// Output format
     #[arg(long, value_enum, default_value_t = OutputFormat::Json, conflicts_with = "count")]
     output: OutputFormat,
@@ -112,7 +117,7 @@ struct Cli {
         conflicts_with_all = [
             "count", "fields", "output",
             "method", "status", "status_range", "url", "url_regex",
-            "header", "mime", "min_time",
+            "header", "mime", "min_time", "body_grep", "body_regex",
         ]
     )]
     entry: Option<usize>,
@@ -131,6 +136,12 @@ struct Cli {
     #[arg(long)]
     validate: bool,
 
+    /// Print a compact, LLM-tuned cheatsheet of every flag and exit. Unlike
+    /// `--help`, this omits clap's formatting and examples so an agent pays
+    /// a few hundred tokens instead of a few thousand for the reference.
+    #[arg(long)]
+    help_llm: bool,
+
     /// Show parsing info on stderr
     #[arg(short, long)]
     verbose: bool,
@@ -139,7 +150,48 @@ struct Cli {
     file: Option<PathBuf>,
 }
 
+const HELP_LLM: &str = "\
+hargrep — HAR query CLI. Reads FILE (or stdin).
+
+FILTERS (AND-combined):
+  --method GET|POST|...         --status CODE
+  --status-range 4xx|200-299    --url SUBSTR
+  --url-regex REGEX             --header 'NAME[:VALUE]'
+  --mime SUBSTR                 --min-time MS
+  --body-grep SUBSTR            --body-regex REGEX
+
+OUTPUT (mutually exclusive):
+  (default)             Filtered entries as JSON (pretty in TTY, compact when piped).
+  --output json|jsonl|summary
+  --fields F,F,...      id,url,method,status,status-text,time,mime-type,started-date-time
+  --count               Matching entry count.
+  --overview            {entries,status,methods,mime_types,top_domains,total_body_size_bytes,total_time_ms}
+  --domains             [{domain,count}] sorted by count desc.
+  --size-by-type        [{mime_type,total_bytes,count}] sorted by total_bytes desc.
+  --redirects           [{id,url,status,location}] for every 3xx.
+  --entry N             One entry by id (original 0-indexed HAR position).
+
+BODY:
+  (default)             Keep JSON/HTML/XML/text; strip CSS/JS/images/fonts/WASM.
+  --no-body             Strip ALL body text.
+  --include-all-bodies  Keep ALL bodies, including static assets.
+
+UTIL: --validate  -v/--verbose  --help  --help-llm  --version
+
+Every entry output includes `id` (stable across filters). Agent flow:
+  hargrep --overview FILE
+  hargrep --status-range 5xx --fields id,url,status FILE     # list
+  hargrep --entry N FILE                                      # drill in
+
+EXIT: 0=matches  1=no matches  2=error (bad args, invalid HAR, IO).
+";
+
 fn run(cli: Cli) -> Result<i32> {
+    if cli.help_llm {
+        print!("{HELP_LLM}");
+        return Ok(0);
+    }
+
     let raw = input::read_input(cli.file.as_deref())?;
 
     let har: har::Har = serde_json::from_str(&raw).map_err(|e| {
@@ -189,6 +241,7 @@ fn run(cli: Cli) -> Result<i32> {
         mime: cli.mime,
         min_time: cli.min_time,
         body_grep: cli.body_grep,
+        body_regex: cli.body_regex,
     };
 
     let filtered = filter::filter_entries(har.log.entries, &filter_opts);

@@ -56,6 +56,7 @@ Reads from stdin if no file is given.
 | `--mime <SUBSTRING>` | `--mime application/json` (matches `application/json; charset=utf-8` too) |
 | `--min-time <MS>` | `--min-time 500` |
 | `--body-grep <SUBSTRING>` | Match against request or response body text (case-sensitive). |
+| `--body-regex <REGEX>` | Regex match against request or response body text. Use `(?i)pattern` for case-insensitive. |
 
 Filters combine with AND logic.
 
@@ -70,7 +71,7 @@ Filters combine with AND logic.
 | `--domains` | Emit `[{domain, count}]` sorted by count desc. Respects filters. |
 | `--size-by-type` | Emit `[{mime_type, total_bytes, count}]` sorted by total_bytes desc. Respects filters. |
 | `--redirects` | Emit `[{id, url, status, location}]` for every 3xx entry. Respects filters. |
-| `--entry <N>` | Fetch a single entry by id (its original 0-indexed position in the HAR). Returns a JSON object, not an array. |
+| `--entry <N>` | Fetch a single entry by id (its original 0-indexed position in the HAR). Returns a JSON object, not an array. As a direct lookup, `--entry` conflicts with every filter flag; combine them and the command errors at parse time. |
 | `--no-body` | Exclude all request/response body text. |
 | `--include-all-bodies` | Include bodies for static-asset MIME types (CSS/JS/images/fonts/WASM). By default those are stripped to save tokens. |
 
@@ -84,6 +85,7 @@ Static-asset response bodies (images, fonts, CSS, JS, WASM, video, audio) are st
 |------|-------------|
 | `--validate` | Validate HAR only, no query |
 | `-v`, `--verbose` | Print parsing info to stderr |
+| `--help-llm` | Print a compact, LLM-tuned cheatsheet of every flag (~1.5 KB vs ~3.5 KB for `--help`) and exit. |
 
 ### Exit codes
 
@@ -120,6 +122,10 @@ hargrep --redirects recording.har                         # all 3xx + Location h
 
 # Body search that actually knows about HAR schema
 hargrep --body-grep 'session expired' --fields id,url,status recording.har
+hargrep --body-regex '(?i)timeout|deadline' --status-range 5xx recording.har
+
+# Compact flag reference for LLM agents (~1.5 KB vs ~3.5 KB for --help)
+hargrep --help-llm
 
 # Validate before processing
 hargrep --validate untrusted.har

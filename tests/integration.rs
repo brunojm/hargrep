@@ -438,6 +438,96 @@ fn test_body_grep_composes_with_other_filters() {
     assert_eq!(parsed[0]["request"]["method"], "POST");
 }
 
+#[test]
+fn test_body_regex_matches_response_body() {
+    let (stdout, _, _) = hargrep(&[
+        "--body-regex",
+        r#""name":\s*"Al\w+""#,
+        "tests/fixtures/valid.har",
+    ]);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(parsed.len(), 1);
+    assert_eq!(parsed[0]["id"], 1);
+}
+
+#[test]
+fn test_body_regex_matches_request_post_body() {
+    let (stdout, _, _) = hargrep(&["--body-regex", "Al.ce", "tests/fixtures/valid.har"]);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    assert!(parsed.iter().any(|e| e["id"] == 1));
+}
+
+#[test]
+fn test_body_regex_invalid_pattern_errors_at_parse() {
+    let (_, stderr, code) = hargrep(&["--body-regex", "[unclosed", "tests/fixtures/valid.har"]);
+    assert_eq!(code, 2);
+    assert!(
+        stderr.to_lowercase().contains("body-regex"),
+        "expected body-regex error, got: {stderr}"
+    );
+}
+
+#[test]
+fn test_body_regex_composes_with_body_grep_as_and() {
+    // Both flags set: entry must match BOTH (AND, like all other filters).
+    let (_, _, code) = hargrep(&[
+        "--body-grep",
+        "Alice",
+        "--body-regex",
+        "^no_match_$",
+        "tests/fixtures/valid.har",
+    ]);
+    assert_eq!(code, 1);
+}
+
+// --- --help-llm ---
+
+#[test]
+fn test_help_llm_emits_compact_cheatsheet() {
+    let (stdout, _, code) = hargrep(&["--help-llm"]);
+    assert_eq!(code, 0);
+    // Must fit in roughly one screen; serves LLM agents, not humans.
+    assert!(
+        stdout.len() < 2000,
+        "--help-llm output should be compact (<2KB); got {} bytes",
+        stdout.len()
+    );
+    // Sanity: lists every top-level flag category we want an agent to know.
+    for needle in [
+        "--method",
+        "--status",
+        "--status-range",
+        "--url",
+        "--mime",
+        "--body-grep",
+        "--body-regex",
+        "--count",
+        "--overview",
+        "--domains",
+        "--size-by-type",
+        "--redirects",
+        "--entry",
+        "--fields",
+        "--output",
+        "--no-body",
+        "--include-all-bodies",
+    ] {
+        assert!(
+            stdout.contains(needle),
+            "--help-llm missing {needle:?}; output:\n{stdout}"
+        );
+    }
+    // Exit codes should be documented.
+    assert!(stdout.contains('0') && stdout.contains('1') && stdout.contains('2'));
+}
+
+#[test]
+fn test_help_llm_does_not_require_a_file() {
+    // --help-llm is a self-contained info flag, like --help.
+    let (_, _, code) = hargrep(&["--help-llm"]);
+    assert_eq!(code, 0);
+}
+
 // --- --overview dashboard ---
 
 #[test]
@@ -668,6 +758,8 @@ fn test_entry_flag_conflicts_with_filter_flags() {
         &["--mime", "json"],
         &["--min-time", "100"],
         &["--header", "Authorization"],
+        &["--body-grep", "Alice"],
+        &["--body-regex", "Al.ce"],
     ];
     for filter_args in cases {
         let mut args = vec!["--entry", "0"];
