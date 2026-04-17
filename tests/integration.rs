@@ -758,6 +758,8 @@ fn test_entry_flag_conflicts_with_filter_flags() {
         &["--mime", "json"],
         &["--min-time", "100"],
         &["--header", "Authorization"],
+        &["--body-grep", "Alice"],
+        &["--body-regex", "Al.ce"],
     ];
     for filter_args in cases {
         let mut args = vec!["--entry", "0"];

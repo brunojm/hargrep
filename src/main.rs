@@ -117,7 +117,7 @@ struct Cli {
         conflicts_with_all = [
             "count", "fields", "output",
             "method", "status", "status_range", "url", "url_regex",
-            "header", "mime", "min_time",
+            "header", "mime", "min_time", "body_grep", "body_regex",
         ]
     )]
     entry: Option<usize>,
