@@ -60,6 +60,28 @@ pub fn size_by_type(entries: &[(usize, Entry)]) -> Value {
     )
 }
 
+/// `--largest-bodies N`: top-N entries by response body size, descending.
+/// Each row: {id, url, mime_type, content_size}. Answers "which URL returned
+/// the largest body?" without forcing the agent to extract `content.size`
+/// from every entry and sort client-side.
+pub fn largest_bodies(entries: &[(usize, Entry)], limit: usize) -> Value {
+    let mut rows: Vec<&(usize, Entry)> = entries.iter().collect();
+    rows.sort_by(|a, b| b.1.response.content.size.cmp(&a.1.response.content.size));
+    rows.truncate(limit);
+    Value::Array(
+        rows.into_iter()
+            .map(|(id, entry)| {
+                json!({
+                    "id": id,
+                    "url": entry.request.url,
+                    "mime_type": entry.response.content.mime_type.clone().unwrap_or_default(),
+                    "content_size": entry.response.content.size,
+                })
+            })
+            .collect(),
+    )
+}
+
 /// `--redirects`: flat list of 3xx entries with their Location header.
 /// Each row: {id, url, status, location}. Chain reconstruction is left to the
 /// caller — the raw pairs are enough information and the format stays simple.

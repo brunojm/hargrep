@@ -65,11 +65,12 @@ Filters combine with AND logic.
 | Flag | Description |
 |------|-------------|
 | `--output <FORMAT>` | `json` (default, pretty in a TTY, compact when piped), `jsonl`, or `summary`. |
-| `--fields <FIELDS>` | Comma-separated. Valid names: `id`, `url`, `method`, `status`, `status-text`, `time`, `mime-type`, `started-date-time`. CLI names are kebab-case; emitted JSON keys preserve HAR camelCase (`statusText`, `mimeType`). Unknown names error at parse time. |
+| `--fields <FIELDS>` | Comma-separated. Valid names: `id`, `url`, `method`, `status`, `status-text`, `time`, `mime-type`, `started-date-time`, `content-size`. CLI names are kebab-case; emitted JSON keys preserve HAR camelCase (`statusText`, `mimeType`, `contentSize`). Unknown names error at parse time. |
 | `--count` | Print only the count of matching entries. Conflicts with `--fields`, `--no-body`, `--output`. |
 | `--overview` | Print a single JSON dashboard of the filtered HAR: entry count, status/method/MIME histograms, top 10 domains, total body size, total time. Replaces a cascade of exploratory queries with one call. |
 | `--domains` | Emit `[{domain, count}]` sorted by count desc. Respects filters. |
 | `--size-by-type` | Emit `[{mime_type, total_bytes, count}]` sorted by total_bytes desc. Respects filters. |
+| `--largest-bodies[=N]` | Emit the top-N entries by response body size: `[{id, url, mime_type, content_size}]` sorted desc. Defaults to N=10. Pass as `--largest-bodies=5`. |
 | `--redirects` | Emit `[{id, url, status, location}]` for every 3xx entry. Respects filters. |
 | `--entry <N>` | Fetch a single entry by id (its original 0-indexed position in the HAR). Returns a JSON object, not an array. As a direct lookup, `--entry` conflicts with every filter flag; combine them and the command errors at parse time. |
 | `--no-body` | Exclude all request/response body text. |
@@ -117,7 +118,9 @@ hargrep --entry 42 recording.har
 
 # Aggregate views — one call each
 hargrep --domains recording.har                           # which hosts?
-hargrep --size-by-type recording.har                      # where's the bandwidth going?
+hargrep --size-by-type recording.har                      # where's the bandwidth going? (by MIME)
+hargrep --largest-bodies recording.har                    # which URLs had the largest bodies?
+hargrep --largest-bodies=3 recording.har                  # top 3 only
 hargrep --redirects recording.har                         # all 3xx + Location headers
 
 # Body search that actually knows about HAR schema

@@ -79,7 +79,7 @@ struct Cli {
     /// Replaces a cascade of exploratory queries with one call.
     #[arg(
         long,
-        conflicts_with_all = ["count", "fields", "entry", "no_body", "include_all_bodies", "output", "domains", "size_by_type", "redirects"]
+        conflicts_with_all = ["count", "fields", "entry", "no_body", "include_all_bodies", "output", "domains", "size_by_type", "redirects", "largest_bodies"]
     )]
     overview: bool,
 
@@ -87,7 +87,7 @@ struct Cli {
     /// Respects filters.
     #[arg(
         long,
-        conflicts_with_all = ["count", "fields", "entry", "no_body", "include_all_bodies", "output", "overview", "size_by_type", "redirects"]
+        conflicts_with_all = ["count", "fields", "entry", "no_body", "include_all_bodies", "output", "overview", "size_by_type", "redirects", "largest_bodies"]
     )]
     domains: bool,
 
@@ -95,7 +95,7 @@ struct Cli {
     /// sorted by total_bytes desc. Respects filters.
     #[arg(
         long,
-        conflicts_with_all = ["count", "fields", "entry", "no_body", "include_all_bodies", "output", "overview", "domains", "redirects"]
+        conflicts_with_all = ["count", "fields", "entry", "no_body", "include_all_bodies", "output", "overview", "domains", "redirects", "largest_bodies"]
     )]
     size_by_type: bool,
 
@@ -103,9 +103,22 @@ struct Cli {
     /// Respects filters.
     #[arg(
         long,
-        conflicts_with_all = ["count", "fields", "entry", "no_body", "include_all_bodies", "output", "overview", "domains", "size_by_type"]
+        conflicts_with_all = ["count", "fields", "entry", "no_body", "include_all_bodies", "output", "overview", "domains", "size_by_type", "largest_bodies"]
     )]
     redirects: bool,
+
+    /// Top-N entries by response body size, desc: [{id, url, mime_type, content_size}].
+    /// Default N = 10. Pass a number with `--largest-bodies=N` to override.
+    /// Respects filters.
+    #[arg(
+        long,
+        value_name = "N",
+        num_args = 0..=1,
+        require_equals = true,
+        default_missing_value = "10",
+        conflicts_with_all = ["count", "fields", "entry", "no_body", "include_all_bodies", "output", "overview", "domains", "size_by_type", "redirects"]
+    )]
+    largest_bodies: Option<usize>,
 
     /// Fetch a single entry by id (the original 0-indexed position in the HAR).
     /// Returns a JSON object, not an array. Useful after listing entries with
@@ -163,11 +176,12 @@ FILTERS (AND-combined):
 OUTPUT (mutually exclusive):
   (default)             Filtered entries as JSON (pretty in TTY, compact when piped).
   --output json|jsonl|summary
-  --fields F,F,...      id,url,method,status,status-text,time,mime-type,started-date-time
+  --fields F,F,...      id,url,method,status,status-text,time,mime-type,started-date-time,content-size
   --count               Matching entry count.
   --overview            {entries,status,methods,mime_types,top_domains,total_body_size_bytes,total_time_ms}
   --domains             [{domain,count}] sorted by count desc.
   --size-by-type        [{mime_type,total_bytes,count}] sorted by total_bytes desc.
+  --largest-bodies[=N]  [{id,url,mime_type,content_size}] top-N by content_size desc (default N=10).
   --redirects           [{id,url,status,location}] for every 3xx.
   --entry N             One entry by id (original 0-indexed HAR position).
 
@@ -270,6 +284,12 @@ fn run(cli: Cli) -> Result<i32> {
 
     if cli.redirects {
         let doc = aggregates::redirects(&filtered);
+        emit_json_doc(&doc)?;
+        return Ok(aggregate_exit_code(&doc));
+    }
+
+    if let Some(limit) = cli.largest_bodies {
+        let doc = aggregates::largest_bodies(&filtered, limit);
         emit_json_doc(&doc)?;
         return Ok(aggregate_exit_code(&doc));
     }

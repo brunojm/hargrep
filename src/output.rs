@@ -29,6 +29,7 @@ pub enum Field {
     Time,
     MimeType,
     StartedDateTime,
+    ContentSize,
 }
 
 impl Field {
@@ -42,6 +43,7 @@ impl Field {
             Field::Time => "time",
             Field::MimeType => "mimeType",
             Field::StartedDateTime => "startedDateTime",
+            Field::ContentSize => "contentSize",
         }
     }
 
@@ -57,6 +59,9 @@ impl Field {
                 Value::String(entry.response.content.mime_type.clone().unwrap_or_default())
             }
             Field::StartedDateTime => Value::String(entry.started_date_time.clone()),
+            // HAR's content.size can be -1 when unknown; surface the raw value
+            // so callers can filter it themselves rather than guessing.
+            Field::ContentSize => Value::Number(entry.response.content.size.into()),
         })
     }
 }

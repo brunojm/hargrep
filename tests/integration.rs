@@ -480,6 +480,85 @@ fn test_body_regex_composes_with_body_grep_as_and() {
     assert_eq!(code, 1);
 }
 
+// --- content-size field + --largest-bodies ---
+
+#[test]
+fn test_fields_includes_content_size() {
+    let (stdout, _, _) = hargrep(&["--fields", "url,content-size", "tests/fixtures/valid.har"]);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    assert!(!parsed.is_empty());
+    for entry in &parsed {
+        assert!(
+            entry.get("contentSize").is_some(),
+            "entry missing contentSize: {entry}"
+        );
+        // Must be a number and non-negative for our test fixtures.
+        let size = entry["contentSize"].as_i64().unwrap();
+        assert!(size >= 0);
+    }
+}
+
+#[test]
+fn test_largest_bodies_default_returns_top_10_sorted_desc() {
+    let (stdout, _, code) = hargrep(&["--largest-bodies", "tests/fixtures/valid.har"]);
+    assert_eq!(code, 0);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    // valid.har has 4 entries → capped at 4.
+    assert_eq!(parsed.len(), 4);
+    for entry in &parsed {
+        assert!(entry.get("id").is_some());
+        assert!(entry.get("url").is_some());
+        assert!(entry.get("content_size").is_some());
+        assert!(entry.get("mime_type").is_some());
+    }
+    // Sorted by content_size desc.
+    let sizes: Vec<i64> = parsed
+        .iter()
+        .map(|e| e["content_size"].as_i64().unwrap())
+        .collect();
+    let mut sorted = sizes.clone();
+    sorted.sort_by(|a, b| b.cmp(a));
+    assert_eq!(sizes, sorted);
+}
+
+#[test]
+fn test_largest_bodies_honors_limit() {
+    // `--largest-bodies=N` (equals) — bare `--largest-bodies N` is ambiguous
+    // with the FILE positional, so clap's require_equals keeps things clear.
+    let (stdout, _, _) = hargrep(&["--largest-bodies=2", "tests/fixtures/valid.har"]);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(parsed.len(), 2);
+}
+
+#[test]
+fn test_largest_bodies_respects_filter() {
+    let (stdout, _, _) = hargrep(&[
+        "--largest-bodies",
+        "--method",
+        "POST",
+        "tests/fixtures/valid.har",
+    ]);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(parsed.len(), 1);
+}
+
+#[test]
+fn test_largest_bodies_exits_1_when_empty() {
+    let (_, _, code) = hargrep(&[
+        "--largest-bodies",
+        "--status",
+        "999",
+        "tests/fixtures/valid.har",
+    ]);
+    assert_eq!(code, 1);
+}
+
+#[test]
+fn test_largest_bodies_conflicts_with_other_views() {
+    let (_, _, code) = hargrep(&["--largest-bodies", "--overview", "tests/fixtures/valid.har"]);
+    assert_eq!(code, 2);
+}
+
 // --- --help-llm ---
 
 #[test]
