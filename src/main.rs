@@ -311,9 +311,9 @@ fn run(cli: Cli) -> Result<i32> {
 }
 
 /// Exit 1 when the aggregate document has nothing to report, 0 otherwise.
-/// Array documents (`--domains`, `--size-by-type`, `--redirects`) are empty
-/// when the array has no rows. The overview object is empty when its
-/// `entries` count is zero.
+/// Array documents (`--domains`, `--size-by-type`, `--redirects`,
+/// `--largest-bodies`) are empty when the array has no rows. The overview
+/// object is empty when its `entries` count is zero.
 fn aggregate_exit_code(doc: &serde_json::Value) -> i32 {
     let is_empty = match doc {
         serde_json::Value::Array(rows) => rows.is_empty(),

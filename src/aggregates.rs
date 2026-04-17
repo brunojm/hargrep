@@ -64,9 +64,14 @@ pub fn size_by_type(entries: &[(usize, Entry)]) -> Value {
 /// Each row: {id, url, mime_type, content_size}. Answers "which URL returned
 /// the largest body?" without forcing the agent to extract `content.size`
 /// from every entry and sort client-side.
+///
+/// Entries whose HAR logger recorded `content.size = -1` (unknown) sort to
+/// the bottom of the desc order — they're the smallest signed value. Sort is
+/// stable, so among equal-size rows the original HAR order is preserved.
+/// `limit = 0` is accepted and yields an empty array.
 pub fn largest_bodies(entries: &[(usize, Entry)], limit: usize) -> Value {
     let mut rows: Vec<&(usize, Entry)> = entries.iter().collect();
-    rows.sort_by(|a, b| b.1.response.content.size.cmp(&a.1.response.content.size));
+    rows.sort_by_key(|row| std::cmp::Reverse(row.1.response.content.size));
     rows.truncate(limit);
     Value::Array(
         rows.into_iter()
@@ -216,6 +221,74 @@ mod tests {
             -1,
         )]));
         assert_eq!(rows.as_array().unwrap()[0]["total_bytes"], 0);
+    }
+
+    #[test]
+    fn largest_bodies_sorts_desc_by_content_size() {
+        let rows = largest_bodies(
+            &indexed(vec![
+                make_entry("GET", "https://x/a", 200, "application/json", 50),
+                make_entry("GET", "https://x/b", 200, "image/png", 5000),
+                make_entry("GET", "https://x/c", 200, "text/html", 800),
+            ]),
+            10,
+        );
+        let arr = rows.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        // The 5000-byte PNG wins; id references the original HAR index (1 here).
+        assert_eq!(arr[0]["id"], 1);
+        assert_eq!(arr[0]["url"], "https://x/b");
+        assert_eq!(arr[0]["content_size"], 5000);
+        assert_eq!(arr[0]["mime_type"], "image/png");
+        assert_eq!(arr[1]["content_size"], 800);
+        assert_eq!(arr[2]["content_size"], 50);
+    }
+
+    #[test]
+    fn largest_bodies_truncates_to_limit() {
+        let entries = (0..20)
+            .map(|i| make_entry("GET", "u", 200, "application/json", (i * 10) as i64))
+            .collect::<Vec<_>>();
+        let rows = largest_bodies(&indexed(entries), 3);
+        let arr = rows.as_array().unwrap();
+        assert_eq!(arr.len(), 3);
+        // Top three by size, descending: 190, 180, 170.
+        assert_eq!(arr[0]["content_size"], 190);
+        assert_eq!(arr[1]["content_size"], 180);
+        assert_eq!(arr[2]["content_size"], 170);
+    }
+
+    #[test]
+    fn largest_bodies_limit_zero_yields_empty_array() {
+        let rows = largest_bodies(
+            &indexed(vec![make_entry("GET", "u", 200, "application/json", 100)]),
+            0,
+        );
+        assert!(rows.as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn largest_bodies_sinks_unknown_size_entries() {
+        // HAR records content.size = -1 when the logger didn't measure it.
+        // Desc sort treats -1 as smaller than real sizes, so these sort last.
+        let rows = largest_bodies(
+            &indexed(vec![
+                make_entry("GET", "https://x/a", 200, "application/json", -1),
+                make_entry("GET", "https://x/b", 200, "image/png", 2000),
+                make_entry("GET", "https://x/c", 200, "application/json", -1),
+                make_entry("GET", "https://x/d", 200, "text/html", 100),
+            ]),
+            10,
+        );
+        let arr = rows.as_array().unwrap();
+        assert_eq!(arr[0]["content_size"], 2000);
+        assert_eq!(arr[1]["content_size"], 100);
+        // Both -1 rows come last; stable sort preserves their original order
+        // so a comes before c.
+        assert_eq!(arr[2]["content_size"], -1);
+        assert_eq!(arr[2]["id"], 0);
+        assert_eq!(arr[3]["content_size"], -1);
+        assert_eq!(arr[3]["id"], 2);
     }
 
     #[test]

@@ -486,15 +486,18 @@ fn test_body_regex_composes_with_body_grep_as_and() {
 fn test_fields_includes_content_size() {
     let (stdout, _, _) = hargrep(&["--fields", "url,content-size", "tests/fixtures/valid.har"]);
     let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
-    assert!(!parsed.is_empty());
+    assert_eq!(parsed.len(), 4);
+    // Values must match the fixture, not just "some non-negative integer" —
+    // otherwise a bug swapping the sort key wouldn't surface here.
+    let sizes: Vec<i64> = parsed
+        .iter()
+        .map(|e| e["contentSize"].as_i64().unwrap())
+        .collect();
+    // Fixture exact values: [123, 45, 20, 50000]. Pinning at least the winner
+    // catches a bug that swaps the sort key to a different numeric field.
+    assert_eq!(sizes, vec![123, 45, 20, 50000]);
     for entry in &parsed {
-        assert!(
-            entry.get("contentSize").is_some(),
-            "entry missing contentSize: {entry}"
-        );
-        // Must be a number and non-negative for our test fixtures.
-        let size = entry["contentSize"].as_i64().unwrap();
-        assert!(size >= 0);
+        assert!(entry.get("url").is_some());
     }
 }
 
@@ -505,13 +508,18 @@ fn test_largest_bodies_default_returns_top_10_sorted_desc() {
     let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
     // valid.har has 4 entries → capped at 4.
     assert_eq!(parsed.len(), 4);
-    for entry in &parsed {
-        assert!(entry.get("id").is_some());
-        assert!(entry.get("url").is_some());
-        assert!(entry.get("content_size").is_some());
-        assert!(entry.get("mime_type").is_some());
-    }
-    // Sorted by content_size desc.
+    // Pin the expected winner: entry 3 is the PNG image with the largest body.
+    // Asserting identity (not just sortedness) catches regressions where the
+    // sort key is swapped to a different numeric field.
+    assert_eq!(parsed[0]["id"], 3);
+    assert!(
+        parsed[0]["url"].as_str().unwrap().contains("image.png"),
+        "expected image URL at rank 0, got {}",
+        parsed[0]["url"]
+    );
+    let top_size = parsed[0]["content_size"].as_i64().unwrap();
+    assert!(top_size > 1000, "PNG body should be >1KB, got {top_size}");
+    // And everything below is strictly smaller-or-equal.
     let sizes: Vec<i64> = parsed
         .iter()
         .map(|e| e["content_size"].as_i64().unwrap())
@@ -519,6 +527,13 @@ fn test_largest_bodies_default_returns_top_10_sorted_desc() {
     let mut sorted = sizes.clone();
     sorted.sort_by(|a, b| b.cmp(a));
     assert_eq!(sizes, sorted);
+    // Schema shape on every row.
+    for entry in &parsed {
+        assert!(entry.get("id").is_some());
+        assert!(entry.get("url").is_some());
+        assert!(entry.get("content_size").is_some());
+        assert!(entry.get("mime_type").is_some());
+    }
 }
 
 #[test]
@@ -528,6 +543,16 @@ fn test_largest_bodies_honors_limit() {
     let (stdout, _, _) = hargrep(&["--largest-bodies=2", "tests/fixtures/valid.har"]);
     let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
     assert_eq!(parsed.len(), 2);
+    // Top-2 must be the PNG (id 3) followed by whichever JSON body is next largest.
+    assert_eq!(parsed[0]["id"], 3);
+}
+
+#[test]
+fn test_largest_bodies_limit_one() {
+    let (stdout, _, _) = hargrep(&["--largest-bodies=1", "tests/fixtures/valid.har"]);
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap();
+    assert_eq!(parsed.len(), 1);
+    assert_eq!(parsed[0]["id"], 3);
 }
 
 #[test]
@@ -555,8 +580,15 @@ fn test_largest_bodies_exits_1_when_empty() {
 
 #[test]
 fn test_largest_bodies_conflicts_with_other_views() {
-    let (_, _, code) = hargrep(&["--largest-bodies", "--overview", "tests/fixtures/valid.har"]);
-    assert_eq!(code, 2);
+    // Must conflict with every other view flag — if clap's conflict list
+    // drops an entry, this test catches it.
+    for other in ["--overview", "--domains", "--size-by-type", "--redirects"] {
+        let (_, stderr, code) = hargrep(&["--largest-bodies", other, "tests/fixtures/valid.har"]);
+        assert_eq!(
+            code, 2,
+            "--largest-bodies with {other} should exit 2; stderr: {stderr}"
+        );
+    }
 }
 
 // --- --help-llm ---

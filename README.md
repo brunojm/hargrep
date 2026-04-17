@@ -70,7 +70,7 @@ Filters combine with AND logic.
 | `--overview` | Print a single JSON dashboard of the filtered HAR: entry count, status/method/MIME histograms, top 10 domains, total body size, total time. Replaces a cascade of exploratory queries with one call. |
 | `--domains` | Emit `[{domain, count}]` sorted by count desc. Respects filters. |
 | `--size-by-type` | Emit `[{mime_type, total_bytes, count}]` sorted by total_bytes desc. Respects filters. |
-| `--largest-bodies[=N]` | Emit the top-N entries by response body size: `[{id, url, mime_type, content_size}]` sorted desc. Defaults to N=10. Pass as `--largest-bodies=5`. |
+| `--largest-bodies[=N]` | Emit the top-N entries by response body size: `[{id, url, mime_type, content_size}]` sorted desc. Defaults to N=10. Pass as `--largest-bodies=5`. Entries whose HAR logger recorded `content.size = -1` (unknown) sort to the bottom. |
 | `--redirects` | Emit `[{id, url, status, location}]` for every 3xx entry. Respects filters. |
 | `--entry <N>` | Fetch a single entry by id (its original 0-indexed position in the HAR). Returns a JSON object, not an array. As a direct lookup, `--entry` conflicts with every filter flag; combine them and the command errors at parse time. |
 | `--no-body` | Exclude all request/response body text. |
